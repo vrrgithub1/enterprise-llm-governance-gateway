@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from app.engines.pii_sanitizer import PIISanitizer
 from app.engines.prompt_firewall import PromptFirewall
+from app.engines.completion_auditor import CompletionAuditor  # New Engine Import
 from app.core.outbound_proxy import OutboundLLMProxy
 from fastapi.responses import RedirectResponse
 
@@ -14,6 +15,7 @@ app = FastAPI(
 # Initialize our decoupled engines and proxies
 pii_engine = PIISanitizer()
 firewall_engine = PromptFirewall()
+auditor_engine = CompletionAuditor()  # Initialize Gate C
 llm_proxy = OutboundLLMProxy()
 
 class PromptPayload(BaseModel):
@@ -33,24 +35,23 @@ async def health_check():
 @app.post("/api/v1/govern/prompt", status_code=status.HTTP_200_OK)
 async def govern_and_proxy_prompt(payload: PromptPayload):
     try:
-        # ---- GATE A: COMPLIANCE FILTER (PII REDACTION) ----
+        # ---- GATE A: INBOUND COMPLIANCE FILTER (PII REDACTION) ----
         sanitized_prompt, pii_telemetry = pii_engine.sanitize(payload.prompt)
         was_redacted = any(count > 0 for count in pii_telemetry.values())
         
-        # ---- GATE B: BEHAVIORAL SECURITY FIREWALL ----
+        # ---- GATE B: INBOUND SECURITY FIREWALL ----
         is_security_violation, firewall_telemetry = firewall_engine.evaluate_payload(sanitized_prompt)
         
-        # Construct audit log metadata
-        governance_metadata = {
-            "user_id": payload.user_id,
-            "target_model": payload.target_model,
-            "compliance_telemetry": pii_telemetry,
-            "security_telemetry": firewall_telemetry,
-            "policy_violation_intercepted": was_redacted or is_security_violation
-        }
-        
-        # Intercept and block if security firewall triggers
+        # Immediate shortcut block if inbound firewall triggers
         if is_security_violation:
+            governance_metadata = {
+                "user_id": payload.user_id,
+                "target_model": payload.target_model,
+                "compliance_telemetry": pii_telemetry,
+                "security_telemetry": firewall_telemetry,
+                "outbound_auditor_telemetry": None,
+                "policy_violation_intercepted": True
+            }
             return {
                 "status": "BLOCKED_BY_GOVERNANCE_GATEKEEPER",
                 "message": "Security Violation: Inbound payload matched known adversarial injection patterns.",
@@ -58,14 +59,28 @@ async def govern_and_proxy_prompt(payload: PromptPayload):
                 "llm_response": None
             }
         
-        # ---- GATE C: ASYNC OUTBOUND INFERENCE HANDSHAKE ----
-        # If it passes security, execute the non-blocking upstream request to the LLM
+        # ---- INFERENCE HANDSHAKE ----
         llm_response_payload = await llm_proxy.forward_inference(sanitized_prompt, payload.target_model)
+        raw_completion_text = llm_response_payload["choices"][0]["message"]["content"]
+        
+        # ---- GATE C: OUTBOUND COMPLETION AUDITOR ----
+        # Evaluate the text *returned* by the model before delivering it to the user
+        is_outbound_violation, finalized_completion, auditor_telemetry = auditor_engine.audit_completion(raw_completion_text)
+        
+        # Master consolidated audit ledger metadata (NIST AI RMF Aligned)
+        governance_metadata = {
+            "user_id": payload.user_id,
+            "target_model": payload.target_model,
+            "compliance_telemetry": pii_telemetry,
+            "security_telemetry": firewall_telemetry,
+            "outbound_auditor_telemetry": auditor_telemetry,
+            "policy_violation_intercepted": was_redacted or is_outbound_violation
+        }
         
         return {
-            "status": "cleared_for_inference" if not was_redacted else "sanitized_for_inference",
+            "status": "cleared_for_user" if not governance_metadata["policy_violation_intercepted"] else "sanitized_with_policy_override",
             "governance_audit": governance_metadata,
-            "llm_response": llm_response_payload["choices"][0]["message"]["content"],
+            "llm_response": finalized_completion,
             "token_telemetry": llm_response_payload.get("usage", {})
         }
         

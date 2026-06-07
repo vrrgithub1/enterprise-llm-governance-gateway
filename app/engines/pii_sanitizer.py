@@ -8,7 +8,8 @@ class PIISanitizer:
             "ssn": re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
             "credit_card": re.compile(r'\b(?:\d{4}[-\s]?){3}\d{4}\b'),
             "aba_routing": re.compile(r'\b\d{9}\b'),
-            "financial_account": re.compile(r'\b\d{8,17}\b')  # Standard institutional account length
+            # UPDATED: Captures 11-17 digit accounts whether continuous or separated by hyphens/spaces
+            "financial_account": re.compile(r'\b\d{3,4}[-\s]?\d{3,4}[-\s]?\d{4,9}\b')
         }
 
     def sanitize(self, text: str) -> Tuple[str, Dict[str, int]]:
