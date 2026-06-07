@@ -40,11 +40,17 @@ The gateway orchestrates a sequential, dual-sided transaction loop across three 
 
 ### 🔐 The Three Core Governance Gates
 
-1. **Gate A: Inbound Compliance Layer (PII Sanitizer):** Scans the incoming textual payload vector using robust regular expression string manipulations to detect and mask sensitive corporate and client financial identifiers (including Social Security Numbers, Credit Cards, ABA Routing Numbers, and formatted Institutional Account IDs) before any bytes exit the corporate network.
+1. **Gate A: Inbound Compliance Layer (PII Sanitizer):**
 
-2. **Gate B: Inbound Security Firewall (Prompt-Injection Defense):** Evaluates prompts against signature jailbreak patterns and adversarial heuristics (e.g., structural instructions override commands, system-prompt harvesting maneuvers) to enforce a strict fail-secure status shortcut before token processing costs are incurred.
+   Scans the incoming textual payload vector using robust regular expression string manipulations to detect and mask sensitive corporate and client financial identifiers (including Social Security Numbers, Credit Cards, ABA Routing Numbers, and formatted Institutional Account IDs) before any bytes exit the corporate network.
 
-3. **Gate C: Outbound Completion Auditor (Regulatory Alignment Plane):** Inspects the generative completion payload returning from the upstream LLM provider prior to delivery to look for restricted fiduciary advice declarations (e.g., absolute financial guarantees or unauthorized underwriting language) and accidental system metadata leakage, substituting violations with legal disclaimers dynamically.
+2. **Gate B: Inbound Security Firewall (Prompt-Injection Defense):**
+
+   Evaluates prompts against signature jailbreak patterns and adversarial heuristics (e.g., structural instructions override commands, system-prompt harvesting maneuvers) to enforce a strict fail-secure status shortcut before token processing costs are incurred.
+
+3. **Gate C: Outbound Completion Auditor (Regulatory Alignment Plane):**
+
+   Inspects the generative completion payload returning from the upstream LLM provider prior to delivery to look for restricted fiduciary advice declarations (e.g., absolute financial guarantees or unauthorized underwriting language) and accidental system metadata leakage, substituting violations with legal disclaimers dynamically.
 
 ## 🛠️ Tech Stack & Implementation Matrix
 
